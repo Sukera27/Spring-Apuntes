@@ -16,7 +16,7 @@
 
 ---
 
-> 🌿 **Estás en la rama `feature/Controllers`.** Respecto a `main` hemos añadido los endpoints que faltaban. Solo cambian **3 archivos**, uno por capa:
+> 🌿 **Estás en la rama `develop`.** Respecto a `main` hemos añadido los endpoints que faltaban. Solo cambian **3 archivos**, uno por capa:
 >
 > | Archivo | Qué hemos añadido |
 > |---------|-------------------|
@@ -24,7 +24,7 @@
 > | `ProductServiceImpl` | La implementación de esos 4 métodos. |
 > | `ProductController` | 4 endpoints nuevos (`GET /{id}`, `POST`, `PUT /{id}`, `DELETE /{id}`) y ahora devolvemos `ResponseEntity`. |
 >
-> 🔍 Para ver las diferencias exactas: `git diff main..feature/Controllers`, o comparando las dos ramas en GitHub.
+> 🔍 Para ver las diferencias exactas: `git diff main..develop`, o comparando las dos ramas en GitHub.
 
 ---
 
