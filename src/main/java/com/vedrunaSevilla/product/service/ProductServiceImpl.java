@@ -22,7 +22,7 @@ public class ProductServiceImpl implements ProductService {
 
     @Override 
     public Product getProductById(Long id) {
-        return productRespository.findById(id).orElseThrow(() -> new RuntimeException("Product not found with id: " + id));
+        return productRespository.findById(id).orElse(null);
     }
 
     @Override

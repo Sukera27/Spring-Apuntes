@@ -16,10 +16,21 @@
 
 ---
 
-> 🌿 **Estás en la rama `feature/Controllers`.** Respecto a `main` hemos añadido los endpoints que faltaban. Solo cambian **3 archivos**, uno por capa:
+> 🌿 **Estás en la rama `feature/dto-converter-response`.** Sale de `develop` (que ya tiene el CRUD de `feature/Controllers`) y trae dos novedades:
 >
-> | Archivo | Qué hemos añadido |
-> |---------|-------------------|
+> 1. 📨 Los controladores ya **no devuelven la entidad** `Product`, sino un **DTO** (`ProductDto`).
+> 2. 🚦 Los endpoints devuelven el **código de estado HTTP correcto** (`201`, `404`...).
+>
+> | Archivo | Qué ha cambiado |
+> |---------|-----------------|
+> | 🆕 `controller/dto/ProductDto` | Clase nueva: los datos del producto que **viajan por la API**. |
+> | 🆕 `controller/converter/Converter` | Clase nueva: convierte `Product` ⇄ `ProductDto`. |
+> | ✏️ `ProductController` | Recibe y devuelve `ProductDto`, usa el `Converter` y devuelve `201 Created` y `404 Not Found`. |
+> | ✏️ `ProductServiceImpl` | `getProductById` devuelve `null` si no existe, en lugar de lanzar una excepción. |
+>
+> 🔍 Para ver las diferencias exactas: `git diff develop..feature/dto-converter-response`, o comparando las dos ramas en GitHub.
+
+---------|-------------------|
 > | `ProductService` | 4 métodos nuevos en el contrato: `getProductById`, `createProduct`, `updateProduct`, `deleteProduct`. |
 > | `ProductServiceImpl` | La implementación de esos 4 métodos. |
 > | `ProductController` | 4 endpoints nuevos (`GET /{id}`, `POST`, `PUT /{id}`, `DELETE /{id}`) y ahora devolvemos `ResponseEntity`. |
@@ -54,7 +65,6 @@ GET http://localhost:8080/api/v1/products
 ```json
 [
   {
-    "productId": 1,
     "name": "Iphone 18 PRO Max",
     "price": 1319.0,
     "description": "Ultima version ya a la venta",
@@ -65,7 +75,7 @@ GET http://localhost:8080/api/v1/products
 
 Es un ejemplo pequeño, pero ya tiene **todas las piezas** que tendrá cualquier microservicio que hagamos durante el curso.
 
-En la rama `feature/Controllers` la API ya hace un **CRUD completo**: listar, buscar por id, crear, modificar y borrar productos.
+La API ya hace un **CRUD completo**: listar, buscar por id, crear, modificar y borrar productos. Y en esta rama, además, lo que entra y sale por la API es un **DTO**, no la entidad.
 
 ---
 
@@ -77,22 +87,27 @@ Cada capa tiene **una sola responsabilidad** y solo habla con la capa que tiene 
 flowchart LR
     C([🌐 Cliente<br/>Navegador / Postman]) -->|HTTP<br/>GET · POST · PUT · DELETE| CT
     subgraph APP [Spring Boot]
-        CT[🎮 Controller<br/>ProductController] --> S[🧠 Service<br/>ProductService]
+        CT[🎮 Controller<br/>ProductController] <-->|ProductDto ⇄ Product| CV[🔄 Converter]
+        CT --> S[🧠 Service<br/>ProductService]
         S --> R[📦 Repository<br/>ProductRespository]
     end
     R -->|SQL| DB[(🐬 MySQL<br/>Tiendadb)]
     DB -.->|filas| R
-    R -.->|List&lt;Product&gt;| S
-    S -.->|List&lt;Product&gt;| CT
-    CT -.->|JSON| C
+    R -.->|Product| S
+    S -.->|Product| CT
+    CT -.->|ProductDto → JSON| C
 ```
 
 | Capa | Pregunta que responde | Clase |
 |------|----------------------|-------|
 | 🎮 **Controller** | *¿Qué URL me han pedido y qué devuelvo?* | `ProductController` |
+| 📨 **DTO** | *¿Qué datos enseño al exterior?* | `ProductDto` |
+| 🔄 **Converter** | *¿Cómo paso de entidad a DTO y viceversa?* | `Converter` |
 | 🧠 **Service** | *¿Qué lógica de negocio hay que aplicar?* | `ProductService` / `ProductServiceImpl` |
 | 📦 **Repository** | *¿Cómo leo y guardo en la base de datos?* | `ProductRespository` |
 | 🧱 **Model** | *¿Cómo es un producto?* | `Product` |
+
+> 🧭 **Regla de esta rama:** la entidad `Product` se queda **dentro** de la aplicación (Service y Repository). Hacia fuera (Controller ⇄ Cliente) solo viaja `ProductDto`.
 
 > 💡 **¿Por qué tantas capas para algo tan simple?** Porque cuando el proyecto crezca (validaciones, seguridad, varias tablas...), cada cosa tendrá su sitio y el código seguirá siendo fácil de entender y de cambiar.
 
@@ -109,7 +124,11 @@ product/
     │   ├── java/com/vedrunaSevilla/product/
     │   │   ├── 🚀 ProductApplication.java       ← Punto de entrada
     │   │   ├── controller/
-    │   │   │   └── ProductController.java       ← Capa web (endpoints)
+    │   │   │   ├── ProductController.java       ← Capa web (endpoints)
+    │   │   │   ├── converter/
+    │   │   │   │   └── Converter.java           ← 🆕 Product ⇄ ProductDto
+    │   │   │   └── dto/
+    │   │   │       └── ProductDto.java          ← 🆕 Lo que viaja por la API
     │   │   ├── service/
     │   │   │   ├── ProductService.java          ← Interfaz (el "qué")
     │   │   │   └── ProductServiceImpl.java      ← Implementación (el "cómo")
@@ -254,15 +273,15 @@ public class Product {
 
 🔗 **Mapeo tabla ↔ clase:**
 
-| Columna en MySQL | Atributo en Java | Nombre en el JSON |
-|------------------|------------------|-------------------|
-| `product_id` | `productId` | `"productId"` |
-| `product_name` | `name` | `"name"` |
-| `product_price` | `price` | `"price"` |
-| `product_description` | `description` | `"description"` |
-| `product_code` | `sku` | `"sku"` |
+| Columna en MySQL | Atributo en `Product` | Atributo en `ProductDto` | Nombre en el JSON |
+|------------------|-----------------------|--------------------------|-------------------|
+| `product_id` | `productId` | — | — |
+| `product_name` | `name` | `name` | `"name"` |
+| `product_price` | `price` | `price` | `"price"` |
+| `product_description` | `description` | `description` | `"description"` |
+| `product_code` | `sku` | `sku` | `"sku"` |
 
-> 💡 Fíjate: gracias a `@Column(name = ...)` el atributo en Java **no tiene por qué llamarse igual** que la columna. Por ejemplo, `product_code` en la BD es `sku` en Java. Y el JSON usa el nombre del **atributo Java**, no el de la columna.
+> 💡 Fíjate: gracias a `@Column(name = ...)` el atributo en Java **no tiene por qué llamarse igual** que la columna. Por ejemplo, `product_code` en la BD es `sku` en Java. Y ahora el JSON usa los nombres de los atributos del **DTO**: como `ProductDto` no tiene `productId`, el id ya no aparece en las respuestas.
 
 ---
 
@@ -315,8 +334,7 @@ public class ProductServiceImpl implements ProductService {
 
     @Override
     public Product getProductById(Long id) {
-        return productRespository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Product not found with id: " + id));
+        return productRespository.findById(id).orElse(null);
     }
 
     @Override
@@ -351,7 +369,7 @@ public class ProductServiceImpl implements ProductService {
 | Método | Qué hace |
 |--------|----------|
 | `getAllProducts()` | Devuelve todos los productos con `findAll()`. |
-| `getProductById(id)` | Busca con `findById(id)`. Devuelve un `Optional`: si el producto existe lo entrega y, si no, `orElseThrow` lanza una excepción. |
+| `getProductById(id)` | Busca con `findById(id)`, que devuelve un `Optional`. Si el producto existe lo entrega y, si no, `orElse(null)` devuelve `null`. ✏️ *Cambiado en esta rama*: antes lanzaba una excepción y ahora es el **controlador** quien decide responder `404`. |
 | `createProduct(product)` | Guarda el producto con `save()`. Como no trae `productId`, la BD le asigna uno nuevo (`INSERT`). |
 | `updateProduct(id, product)` | **Primero busca** el producto que ya existe, **le cambia** `name`, `description` y `price` con los valores recibidos y lo guarda (`UPDATE`). |
 | `deleteProduct(id)` | Busca el producto (si no existe falla) y lo borra con `delete()`. |
@@ -362,7 +380,85 @@ public class ProductServiceImpl implements ProductService {
 
 ---
 
-### 🎮 5. El controlador — `ProductController`
+### 📨 5. El DTO — `ProductDto` 🆕
+
+Un **DTO** (*Data Transfer Object*) es una clase sencilla que solo sirve para **transportar datos** entre el cliente y nuestra API. Es lo que el cliente **ve** y lo que el cliente **manda**.
+
+```java
+@Data
+public class ProductDto {
+
+    private String name;
+
+    private double price;
+
+    private String description;
+
+    private String sku;
+}
+```
+
+Solo tiene `@Data` de Lombok: **nada de JPA** (ni `@Entity`, ni `@Id`, ni `@Column`). No sabe nada de la base de datos.
+
+**¿Por qué no devolvemos directamente la entidad `Product`?**
+
+| Sin DTO (devolviendo `Product`) | Con DTO (devolviendo `ProductDto`) |
+|---------------------------------|------------------------------------|
+| Enseñamos **cómo es nuestra tabla** por dentro | Enseñamos solo lo que **queremos** enseñar |
+| Si cambiamos la BD, **cambia el JSON** y rompemos a los clientes | La BD puede cambiar y el JSON **sigue igual** |
+| El cliente podría mandar campos que no debería tocar (por ejemplo, el id) | El cliente solo puede mandar los campos del DTO |
+| Imposible ocultar datos sensibles (contraseñas, campos internos...) | Basta con **no ponerlos** en el DTO |
+
+> 🍽️ **Analogía:** la entidad es la **cocina** del restaurante y el DTO es el **plato** que llega a la mesa. El cliente no necesita ver la cocina.
+
+---
+
+### 🔄 6. El conversor — `Converter` 🆕
+
+Alguien tiene que **pasar los datos** de `Product` a `ProductDto` y al revés. De eso se encarga el `Converter`:
+
+```java
+@Component
+public class Converter {
+
+    public ProductDto convertToDto(Product product) {
+        ProductDto productDto = new ProductDto();
+        productDto.setName(product.getName());
+        productDto.setPrice(product.getPrice());
+        productDto.setDescription(product.getDescription());
+        productDto.setSku(product.getSku());
+        return productDto;
+    }
+
+    public Product convertToEntity(ProductDto productDto) {
+        Product product = new Product();
+        product.setName(productDto.getName());
+        product.setPrice(productDto.getPrice());
+        product.setDescription(productDto.getDescription());
+        product.setSku(productDto.getSku());
+        return product;
+    }
+}
+```
+
+| Método | Dirección | Cuándo se usa |
+|--------|-----------|---------------|
+| `convertToDto(product)` | `Product` ➡️ `ProductDto` | Al **responder**: lo que sale de la BD se convierte antes de enviarlo |
+| `convertToEntity(productDto)` | `ProductDto` ➡️ `Product` | Al **recibir**: lo que manda el cliente se convierte antes de pasarlo al service |
+
+- `@Component` → igual que `@Service`, convierte la clase en un **bean** de Spring, así podemos **inyectarla** en el controlador. Usamos `@Component` porque no es lógica de negocio: es una clase de apoyo genérica.
+
+```mermaid
+flowchart LR
+    J1([📥 JSON]) --> D1[ProductDto] -->|convertToEntity| E1[Product] --> SV[🧠 Service]
+    SV --> E2[Product] -->|convertToDto| D2[ProductDto] --> J2([📤 JSON])
+```
+
+> 💡 Hacemos la conversión **a mano** para entender qué pasa por dentro. En proyectos reales se suelen usar librerías que la automatizan, como **MapStruct** o **ModelMapper**.
+
+---
+
+### 🎮 7. El controlador — `ProductController`
 
 ```java
 @RestController
@@ -373,24 +469,47 @@ public class ProductController {
 
     ProductService productService;
 
+    Converter converter;
+
     @GetMapping
-    public ResponseEntity<List<Product>> getAllProducts() {
-        return ResponseEntity.ok(productService.getAllProducts());
+    public ResponseEntity<List<ProductDto>> getAllProducts() {
+        return ResponseEntity.ok(productService.getAllProducts().stream().map(converter::convertToDto).collect(Collectors.toList()));
+    }
+
+    @GetMapping("/")
+    public ResponseEntity<List<ProductDto>> getAllProducts2() {
+        List<ProductDto> productDtos = new ArrayList();
+        for (Product product : productService.getAllProducts()) {
+            ProductDto productDto = converter.convertToDto(product);
+            productDtos.add(productDto);
+        }
+        return ResponseEntity.ok(productDtos);
     }
 
     @GetMapping("/{id}")
-    public ResponseEntity<Product> getProductById(@PathVariable Long id) {
-        return ResponseEntity.ok(productService.getProductById(id));
+    public ResponseEntity<ProductDto> getProductById(@PathVariable Long id) {
+
+        Optional<Product> productOptional = Optional.ofNullable(productService.getProductById(id));
+
+        if (productOptional.isPresent()) {
+            Product product = productOptional.get();
+            ProductDto productDto = converter.convertToDto(product);
+            return ResponseEntity.ok(productDto);
+        } else {
+            return ResponseEntity.notFound().build();
+        }
     }
 
     @PostMapping
-    public ResponseEntity<Product> createProduct(@RequestBody Product product) {
-        return ResponseEntity.ok(productService.createProduct(product));
+    public ResponseEntity<ProductDto> createProduct(@RequestBody ProductDto productDto) {
+        Product product = converter.convertToEntity(productDto);
+        return ResponseEntity.status(HttpStatus.CREATED).body(converter.convertToDto(productService.createProduct(product)));
     }
 
     @PutMapping("/{id}")
-    public ResponseEntity<Product> updateProduct(@PathVariable Long id, @RequestBody Product product) {
-        return ResponseEntity.ok(productService.updateProduct(id, product));
+    public ResponseEntity<ProductDto> updateProduct(@PathVariable Long id, @RequestBody ProductDto productDto) {
+        Product product = converter.convertToEntity(productDto);
+        return ResponseEntity.ok(converter.convertToDto(productService.updateProduct(id, product)));
     }
 
     @DeleteMapping("/{id}")
@@ -408,17 +527,84 @@ public class ProductController {
 - `@PutMapping("/{id}")` → responde a peticiones **PUT** (modificar). El `{id}` es una parte variable de la URL.
 - `@DeleteMapping("/{id}")` → responde a peticiones **DELETE** (borrar).
 - `@PathVariable` → recoge el valor de `{id}` de la URL y lo mete en el parámetro. En `/api/v1/products/3`, `id` vale `3`.
-- `@RequestBody` → coge el **JSON** que viene en el cuerpo de la petición y lo convierte en un objeto `Product`.
+- `@RequestBody` → coge el **JSON** que viene en el cuerpo de la petición y lo convierte en un objeto. ✏️ *Ahora en un `ProductDto`*, no en un `Product`.
 - `@CrossOrigin` → permite que un frontend alojado en otro dominio/puerto (por ejemplo, Angular o React) pueda llamar a la API (**CORS**).
+- `Converter converter` → ✏️ *nuevo*: igual que el service, Spring lo **inyecta** gracias a `@AllArgsConstructor`.
 
-#### 📬 `ResponseEntity`: controlar la respuesta HTTP
+#### 🔁 Del bucle `for` al `stream()`
 
-Antes devolvíamos directamente la lista. Ahora devolvemos un `ResponseEntity<T>`, que nos deja decidir **el código de estado HTTP** además del cuerpo:
+`getAllProducts()` y `getAllProducts2()` hacen **exactamente lo mismo**: recorren la lista de `Product` y la convierten en una lista de `ProductDto`.
 
-| Código | Cuándo lo usamos |
-|:------:|------------------|
-| `200 OK` | `ResponseEntity.ok(...)` → la petición fue bien y devolvemos datos. |
-| `204 No Content` | `ResponseEntity.noContent().build()` → el borrado fue bien y **no hay nada que devolver** (por eso el tipo es `ResponseEntity<Void>`). |
+`getAllProducts2()` está ahí **a propósito**, para entender el `stream()` partiendo de algo que ya conocemos: el bucle `for`. Un `stream()` **no deja de ser un bucle**, solo que escrito de otra forma.
+
+**🔂 Paso 1 — Lo que ya sabemos hacer (`GET /api/v1/products/`)**
+
+```java
+List<ProductDto> productDtos = new ArrayList();          // ① creo una lista vacía
+for (Product product : productService.getAllProducts()) { // ② recorro los productos uno a uno
+    ProductDto productDto = converter.convertToDto(product); // ③ transformo cada uno
+    productDtos.add(productDto);                         // ④ lo guardo en la lista nueva
+}
+return ResponseEntity.ok(productDtos);
+```
+
+**🌊 Paso 2 — Lo mismo con `stream()` (`GET /api/v1/products`)**
+
+```java
+productService.getAllProducts()
+    .stream()                          // ② recorro los productos uno a uno
+    .map(converter::convertToDto)      // ③ transformo cada uno
+    .collect(Collectors.toList());     // ① + ④ creo la lista y voy guardando
+```
+
+**🧩 Pieza a pieza: qué parte del `for` es cada parte del `stream()`**
+
+| | En el bucle `for` | En el `stream()` |
+|:-:|-------------------|------------------|
+| ② | `for (Product product : lista)` | `.stream()` |
+| ③ | `converter.convertToDto(product)` | `.map(converter::convertToDto)` |
+| ① + ④ | `new ArrayList()` + `productDtos.add(...)` | `.collect(Collectors.toList())` |
+
+> 🔍 **¿Y ese `::` tan raro?** `converter::convertToDto` es una *referencia a método*. Es la forma corta de escribir esta *lambda*:
+>
+> ```java
+> .map(product -> converter.convertToDto(product))
+> ```
+>
+> Léelo así: *"por cada `product`, devuélveme `converter.convertToDto(product)`"*. Es justo lo que hacía la línea ③ dentro del `for`.
+
+> 💡 **¿Cuál usamos?** Los dos funcionan igual. El `for` es más fácil de leer al principio; el `stream()` es más corto, se lee como una frase (*"coge los productos, transfórmalos y júntalos en una lista"*) y es lo que os vais a encontrar en proyectos reales.
+
+#### ❓ `Optional` en `getProductById`
+
+El service ahora devuelve `null` si el producto no existe. En el controlador lo envolvemos en un `Optional` con `Optional.ofNullable(...)` y preguntamos:
+
+- `isPresent()` → ✅ existe → lo convertimos a DTO y respondemos `200 OK`.
+- Si no → ❌ no existe → respondemos `404 Not Found` con `ResponseEntity.notFound().build()`.
+
+#### 🚦 `ResponseEntity`: el código de estado correcto
+
+`ResponseEntity<T>` nos deja decidir **el código de estado HTTP** además del cuerpo. Cada operación tiene su código "oficial":
+
+| Código | Significado | Cómo se escribe |
+|:------:|-------------|-----------------|
+| `200 OK` | Todo bien y devolvemos datos | `ResponseEntity.ok(body)` |
+| `201 Created` | Se ha **creado** un recurso nuevo | `ResponseEntity.status(HttpStatus.CREATED).body(body)` |
+| `204 No Content` | Todo bien, pero **no hay nada que devolver** | `ResponseEntity.noContent().build()` |
+| `404 Not Found` | El recurso **no existe** | `ResponseEntity.notFound().build()` |
+| `500 Internal Server Error` | Algo ha **petado** en el servidor (una excepción sin controlar) | *(no lo escribimos nosotros, ocurre solo)* |
+
+**¿Cómo está cada endpoint?**
+
+| Endpoint | Si va bien | Si el producto no existe |
+|----------|:----------:|:------------------------:|
+| `GET /products` | `200` ✅ | — |
+| `GET /products/{id}` | `200` ✅ | `404` ✅ |
+| `POST /products` | `201` ✅ | — |
+| `PUT /products/{id}` | `200` ✅ | `500` 🧑‍🏫 *lo arreglamos en clase* |
+| `DELETE /products/{id}` | `204` ✅ | `500` 🧑‍🏫 *lo arreglamos en clase* |
+
+> 🧑‍🏫 **Reto para clase:** en `PUT` y `DELETE`, si el id no existe, el service lanza una `RuntimeException` y el cliente recibe un `500`. ¿Cómo haríais para que devuelvan un `404`, igual que `GET /{id}`? 🤔
 
 > 💡 Fíjate en que el controlador depende de la **interfaz** `ProductService`, no de `ProductServiceImpl`. Si mañana cambiamos la implementación, el controlador ni se entera.
 
@@ -479,7 +665,8 @@ Started ProductApplication in 2.345 seconds
 
 | Método | Endpoint | Descripción |
 |:------:|----------|-------------|
-| ![GET](https://img.shields.io/badge/GET-2ea44f?style=flat-square) | `/api/v1/products` | Devuelve todos los productos |
+| ![GET](https://img.shields.io/badge/GET-2ea44f?style=flat-square) | `/api/v1/products` | Devuelve todos los productos (con `stream()`) |
+| ![GET](https://img.shields.io/badge/GET-2ea44f?style=flat-square) | `/api/v1/products/` | Devuelve todos los productos (con bucle `for`) |
 | ![GET](https://img.shields.io/badge/GET-2ea44f?style=flat-square) | `/api/v1/products/{id}` | Devuelve el producto con ese id |
 | ![POST](https://img.shields.io/badge/POST-0969da?style=flat-square) | `/api/v1/products` | Crea un producto nuevo |
 | ![PUT](https://img.shields.io/badge/PUT-bf8700?style=flat-square) | `/api/v1/products/{id}` | Modifica el producto con ese id |
@@ -511,7 +698,7 @@ curl -X POST http://localhost:8080/api/v1/products \
   -d '{"name": "Airpods Pro", "price": 279.0, "description": "Cancelación de ruido", "sku": "AP01"}'
 ```
 
-Respuesta `200 OK` con el producto ya guardado y su `productId`.
+Respuesta `201 Created` con el producto ya guardado (como `ProductDto`).
 
 ### ✏️ Modificar un producto (`PUT`)
 
@@ -539,6 +726,15 @@ Respuesta `204 No Content`: se ha borrado y no hay cuerpo.
 curl http://localhost:8080/api/v1/products/1
 ```
 
+Respuesta `200 OK` si existe, o `404 Not Found` si no existe. Prueba con un id que no esté, por ejemplo `/api/v1/products/999`.
+
+> 👀 **Truco:** con `curl -i` verás también el **código de estado** y las cabeceras de la respuesta:
+>
+> ```bash
+> curl -i http://localhost:8080/api/v1/products/999
+> # HTTP/1.1 404
+> ```
+
 ---
 
 ## 📝 Chuleta de anotaciones
@@ -556,12 +752,13 @@ curl http://localhost:8080/api/v1/products/1
 | `@RequestBody` | Parámetro | Convierte el JSON del cuerpo en un objeto Java |
 | `@CrossOrigin` | Controller | Habilita CORS |
 | `@Service` | Service | Marca la clase como bean de lógica de negocio |
+| `@Component` | Converter | Marca la clase como bean genérico de Spring |
 | `@Entity` | Model | La clase representa una tabla |
 | `@Table` | Model | Nombre de la tabla |
 | `@Id` | Atributo | Clave primaria |
 | `@GeneratedValue` | Atributo | El id lo genera la BD (AUTO_INCREMENT) |
 | `@Column` | Atributo | Nombre de la columna |
-| `@Data` 🌶️ | Model | *(Lombok)* getters, setters, `toString`, `equals`, `hashCode` |
+| `@Data` 🌶️ | Model / DTO | *(Lombok)* getters, setters, `toString`, `equals`, `hashCode` |
 | `@NoArgsConstructor` 🌶️ | Model | *(Lombok)* constructor vacío (JPA lo necesita) |
 | `@AllArgsConstructor` 🌶️ | Controller / Service | *(Lombok)* constructor con todos los atributos → inyección de dependencias |
 
@@ -574,9 +771,10 @@ curl http://localhost:8080/api/v1/products/1
 - [x] Crear un producto (`POST`)
 - [x] Modificar un producto (`PUT`)
 - [x] Borrar un producto (`DELETE`)
-- [ ] Devolver `404 Not Found` cuando el producto no existe (ahora lanzamos una `RuntimeException` genérica, que acaba en un `500`)
-- [ ] Devolver `201 Created` al crear un producto
-- [ ] Validar los datos de entrada (nombre obligatorio, precio positivo...)
+- [x] Devolver un **DTO** en lugar de la entidad
+- [x] Devolver `201 Created` al crear un producto
+- [x] Devolver `404 Not Found` en `GET /{id}` cuando el producto no existe
+- [ ] Testing unitario con (`JUnit`) y (`Mockito`)
 
 ---
 
