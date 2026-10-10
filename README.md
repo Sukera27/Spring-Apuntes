@@ -16,6 +16,18 @@
 
 ---
 
+> 🌿 **Estás en la rama `feature/Controllers`.** Respecto a `main` hemos añadido los endpoints que faltaban. Solo cambian **3 archivos**, uno por capa:
+>
+> | Archivo | Qué hemos añadido |
+> |---------|-------------------|
+> | `ProductService` | 4 métodos nuevos en el contrato: `getProductById`, `createProduct`, `updateProduct`, `deleteProduct`. |
+> | `ProductServiceImpl` | La implementación de esos 4 métodos. |
+> | `ProductController` | 4 endpoints nuevos (`GET /{id}`, `POST`, `PUT /{id}`, `DELETE /{id}`) y ahora devolvemos `ResponseEntity`. |
+>
+> 🔍 Para ver las diferencias exactas: `git diff main..feature/Controllers`, o comparando las dos ramas en GitHub.
+
+---
+
 ## 📖 Índice
 
 1. [¿Qué vamos a construir?](#-qué-vamos-a-construir)
@@ -53,6 +65,8 @@ GET http://localhost:8080/api/v1/products
 
 Es un ejemplo pequeño, pero ya tiene **todas las piezas** que tendrá cualquier microservicio que hagamos durante el curso.
 
+En la rama `feature/Controllers` la API ya hace un **CRUD completo**: listar, buscar por id, crear, modificar y borrar productos.
+
 ---
 
 ## 🏗️ La arquitectura en capas
@@ -61,7 +75,7 @@ Cada capa tiene **una sola responsabilidad** y solo habla con la capa que tiene 
 
 ```mermaid
 flowchart LR
-    C([🌐 Cliente<br/>Navegador / Postman]) -->|HTTP GET| CT
+    C([🌐 Cliente<br/>Navegador / Postman]) -->|HTTP<br/>GET · POST · PUT · DELETE| CT
     subgraph APP [Spring Boot]
         CT[🎮 Controller<br/>ProductController] --> S[🧠 Service<br/>ProductService]
         S --> R[📦 Repository<br/>ProductRespository]
@@ -280,6 +294,10 @@ Separamos el **contrato** (interfaz) de la **implementación**:
 ```java
 public interface ProductService {
     public List<Product> getAllProducts();
+    public Product getProductById(Long id);
+    public Product createProduct(Product product);
+    public Product updateProduct(Long id, Product product);
+    public void deleteProduct(Long id);
 }
 ```
 
@@ -294,11 +312,51 @@ public class ProductServiceImpl implements ProductService {
     public List<Product> getAllProducts() {
         return productRespository.findAll();
     }
+
+    @Override
+    public Product getProductById(Long id) {
+        return productRespository.findById(id)
+                .orElseThrow(() -> new RuntimeException("Product not found with id: " + id));
+    }
+
+    @Override
+    public Product createProduct(Product product) {
+        return productRespository.save(product);
+    }
+
+    @Override
+    public Product updateProduct(Long id, Product product) {
+        Product existingProduct = productRespository.findById(id)
+                .orElseThrow(() -> new RuntimeException("Product not found with id: " + id));
+        existingProduct.setName(product.getName());
+        existingProduct.setDescription(product.getDescription());
+        existingProduct.setPrice(product.getPrice());
+        return productRespository.save(existingProduct);
+    }
+
+    @Override
+    public void deleteProduct(Long id) {
+        Product existingProduct = productRespository.findById(id)
+                .orElseThrow(() -> new RuntimeException("Product not found with id: " + id));
+        productRespository.delete(existingProduct);
+    }
 }
 ```
 
 - `@Service` → Spring crea un objeto de esta clase y lo gestiona él (es un **bean**).
 - `@AllArgsConstructor` → Lombok genera un constructor con el repositorio como parámetro, y Spring lo usa para **inyectarlo** automáticamente.
+
+**¿Qué hace cada método?**
+
+| Método | Qué hace |
+|--------|----------|
+| `getAllProducts()` | Devuelve todos los productos con `findAll()`. |
+| `getProductById(id)` | Busca con `findById(id)`. Devuelve un `Optional`: si el producto existe lo entrega y, si no, `orElseThrow` lanza una excepción. |
+| `createProduct(product)` | Guarda el producto con `save()`. Como no trae `productId`, la BD le asigna uno nuevo (`INSERT`). |
+| `updateProduct(id, product)` | **Primero busca** el producto que ya existe, **le cambia** `name`, `description` y `price` con los valores recibidos y lo guarda (`UPDATE`). |
+| `deleteProduct(id)` | Busca el producto (si no existe falla) y lo borra con `delete()`. |
+
+> 🔎 **Fíjate en `updateProduct`:** no guardamos directamente el `product` que llega, sino que modificamos el `existingProduct` que acabamos de leer de la BD. Así nos aseguramos de que el id es el de la URL y de que solo tocamos los campos que queremos.
 
 > 💉 **Inyección de dependencias:** nosotros **nunca** hacemos `new ProductRespository()`. Declaramos lo que necesitamos y Spring nos lo da ya creado. A esto se le llama *Inversión de Control (IoC)*.
 
@@ -316,8 +374,29 @@ public class ProductController {
     ProductService productService;
 
     @GetMapping
-    public List<Product> getAllProducts() {
-        return productService.getAllProducts();
+    public ResponseEntity<List<Product>> getAllProducts() {
+        return ResponseEntity.ok(productService.getAllProducts());
+    }
+
+    @GetMapping("/{id}")
+    public ResponseEntity<Product> getProductById(@PathVariable Long id) {
+        return ResponseEntity.ok(productService.getProductById(id));
+    }
+
+    @PostMapping
+    public ResponseEntity<Product> createProduct(@RequestBody Product product) {
+        return ResponseEntity.ok(productService.createProduct(product));
+    }
+
+    @PutMapping("/{id}")
+    public ResponseEntity<Product> updateProduct(@PathVariable Long id, @RequestBody Product product) {
+        return ResponseEntity.ok(productService.updateProduct(id, product));
+    }
+
+    @DeleteMapping("/{id}")
+    public ResponseEntity<Void> deleteProduct(@PathVariable Long id) {
+        productService.deleteProduct(id);
+        return ResponseEntity.noContent().build();
     }
 }
 ```
@@ -325,7 +404,21 @@ public class ProductController {
 - `@RestController` → esta clase atiende peticiones HTTP y lo que devuelve se convierte **automáticamente a JSON**.
 - `@RequestMapping("/api/v1/products")` → la URL base de todos sus endpoints.
 - `@GetMapping` → este método responde a peticiones **GET** en esa URL.
+- `@PostMapping` → responde a peticiones **POST** (crear).
+- `@PutMapping("/{id}")` → responde a peticiones **PUT** (modificar). El `{id}` es una parte variable de la URL.
+- `@DeleteMapping("/{id}")` → responde a peticiones **DELETE** (borrar).
+- `@PathVariable` → recoge el valor de `{id}` de la URL y lo mete en el parámetro. En `/api/v1/products/3`, `id` vale `3`.
+- `@RequestBody` → coge el **JSON** que viene en el cuerpo de la petición y lo convierte en un objeto `Product`.
 - `@CrossOrigin` → permite que un frontend alojado en otro dominio/puerto (por ejemplo, Angular o React) pueda llamar a la API (**CORS**).
+
+#### 📬 `ResponseEntity`: controlar la respuesta HTTP
+
+Antes devolvíamos directamente la lista. Ahora devolvemos un `ResponseEntity<T>`, que nos deja decidir **el código de estado HTTP** además del cuerpo:
+
+| Código | Cuándo lo usamos |
+|:------:|------------------|
+| `200 OK` | `ResponseEntity.ok(...)` → la petición fue bien y devolvemos datos. |
+| `204 No Content` | `ResponseEntity.noContent().build()` → el borrado fue bien y **no hay nada que devolver** (por eso el tipo es `ResponseEntity<Void>`). |
 
 > 💡 Fíjate en que el controlador depende de la **interfaz** `ProductService`, no de `ProductServiceImpl`. Si mañana cambiamos la implementación, el controlador ni se entera.
 
@@ -387,6 +480,10 @@ Started ProductApplication in 2.345 seconds
 | Método | Endpoint | Descripción |
 |:------:|----------|-------------|
 | ![GET](https://img.shields.io/badge/GET-2ea44f?style=flat-square) | `/api/v1/products` | Devuelve todos los productos |
+| ![GET](https://img.shields.io/badge/GET-2ea44f?style=flat-square) | `/api/v1/products/{id}` | Devuelve el producto con ese id |
+| ![POST](https://img.shields.io/badge/POST-0969da?style=flat-square) | `/api/v1/products` | Crea un producto nuevo |
+| ![PUT](https://img.shields.io/badge/PUT-bf8700?style=flat-square) | `/api/v1/products/{id}` | Modifica el producto con ese id |
+| ![DELETE](https://img.shields.io/badge/DELETE-cf222e?style=flat-square) | `/api/v1/products/{id}` | Borra el producto con ese id |
 
 **Opción A — Navegador 🌐**
 
@@ -402,6 +499,46 @@ curl http://localhost:8080/api/v1/products
 
 Crea una petición `GET` a `http://localhost:8080/api/v1/products` y pulsa **Send**.
 
+> 🌐 El navegador solo sabe hacer `GET`. Para probar `POST`, `PUT` y `DELETE` usa **Postman**, **Thunder Client** o `curl`.
+
+### ➕ Crear un producto (`POST`)
+
+En el cuerpo (*Body → raw → JSON*) mandamos el producto **sin `productId`**: lo genera la base de datos.
+
+```bash
+curl -X POST http://localhost:8080/api/v1/products \
+  -H "Content-Type: application/json" \
+  -d '{"name": "Airpods Pro", "price": 279.0, "description": "Cancelación de ruido", "sku": "AP01"}'
+```
+
+Respuesta `200 OK` con el producto ya guardado y su `productId`.
+
+### ✏️ Modificar un producto (`PUT`)
+
+El id va en la **URL** y los nuevos datos en el **cuerpo**:
+
+```bash
+curl -X PUT http://localhost:8080/api/v1/products/1 \
+  -H "Content-Type: application/json" \
+  -d '{"name": "Iphone 18 PRO Max", "price": 1199.0, "description": "Rebajado"}'
+```
+
+Se actualizan `name`, `description` y `price`.
+
+### 🗑️ Borrar un producto (`DELETE`)
+
+```bash
+curl -X DELETE http://localhost:8080/api/v1/products/1
+```
+
+Respuesta `204 No Content`: se ha borrado y no hay cuerpo.
+
+### 🔍 Buscar uno por id (`GET /{id}`)
+
+```bash
+curl http://localhost:8080/api/v1/products/1
+```
+
 ---
 
 ## 📝 Chuleta de anotaciones
@@ -412,6 +549,11 @@ Crea una petición `GET` a `http://localhost:8080/api/v1/products` y pulsa **Sen
 | `@RestController` | Controller | Clase que atiende HTTP y responde JSON |
 | `@RequestMapping` | Controller | Ruta base de la clase |
 | `@GetMapping` | Método | Responde a peticiones GET |
+| `@PostMapping` | Método | Responde a peticiones POST (crear) |
+| `@PutMapping` | Método | Responde a peticiones PUT (modificar) |
+| `@DeleteMapping` | Método | Responde a peticiones DELETE (borrar) |
+| `@PathVariable` | Parámetro | Recoge un valor de la URL (`/{id}`) |
+| `@RequestBody` | Parámetro | Convierte el JSON del cuerpo en un objeto Java |
 | `@CrossOrigin` | Controller | Habilita CORS |
 | `@Service` | Service | Marca la clase como bean de lógica de negocio |
 | `@Entity` | Model | La clase representa una tabla |
@@ -428,10 +570,13 @@ Crea una petición `GET` a `http://localhost:8080/api/v1/products` y pulsa **Sen
 ## 🔜 Próximamente...
 
 - [x] Listar todos los productos (`GET`)
-- [ ] Buscar un producto por id (`GET /{id}`)
-- [ ] Crear un producto (`POST`)
-- [ ] Modificar un producto (`PUT`)
-- [ ] Borrar un producto (`DELETE`)
+- [x] Buscar un producto por id (`GET /{id}`)
+- [x] Crear un producto (`POST`)
+- [x] Modificar un producto (`PUT`)
+- [x] Borrar un producto (`DELETE`)
+- [ ] Devolver `404 Not Found` cuando el producto no existe (ahora lanzamos una `RuntimeException` genérica, que acaba en un `500`)
+- [ ] Devolver `201 Created` al crear un producto
+- [ ] Validar los datos de entrada (nombre obligatorio, precio positivo...)
 
 ---
 
