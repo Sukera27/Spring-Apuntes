@@ -16,7 +16,7 @@
 
 ---
 
-> 🌿 **Estás en la rama `feature/dto-converter-response`.** Sale de `develop` (que ya tiene el CRUD de `feature/Controllers`) y trae dos novedades:
+> 🌿 **Estás en la rama `develop`.** Respecto a `main` hemos añadido los endpoints que faltaban. Solo cambian **3 archivos**, uno por capa:
 >
 > 1. 📨 Los controladores ya **no devuelven la entidad** `Product`, sino un **DTO** (`ProductDto`).
 > 2. 🚦 Los endpoints devuelven el **código de estado HTTP correcto** (`201`, `404`...).
@@ -35,7 +35,7 @@
 > | `ProductServiceImpl` | La implementación de esos 4 métodos. |
 > | `ProductController` | 4 endpoints nuevos (`GET /{id}`, `POST`, `PUT /{id}`, `DELETE /{id}`) y ahora devolvemos `ResponseEntity`. |
 >
-> 🔍 Para ver las diferencias exactas: `git diff main..feature/Controllers`, o comparando las dos ramas en GitHub.
+> 🔍 Para ver las diferencias exactas: `git diff main..develop`, o comparando las dos ramas en GitHub.
 
 ---
 
