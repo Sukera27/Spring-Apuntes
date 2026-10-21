@@ -10,10 +10,10 @@ public class Converter {
 
     public ProductDto convertToDto(Product product) {
         ProductDto productDto = new ProductDto();
+        productDto.setId(product.getProductId());
         productDto.setName(product.getName());
         productDto.setPrice(product.getPrice());
         productDto.setDescription(product.getDescription());
-        productDto.setSku(product.getSku());
         return productDto;
     }
 
@@ -22,7 +22,6 @@ public class Converter {
         product.setName(productDto.getName());
         product.setPrice(productDto.getPrice());
         product.setDescription(productDto.getDescription());
-        product.setSku(productDto.getSku());
         return product;
     }
 }

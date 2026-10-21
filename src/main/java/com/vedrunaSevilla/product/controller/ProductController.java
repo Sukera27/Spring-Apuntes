@@ -54,15 +54,10 @@ public class ProductController {
     @GetMapping ("/{id}")
     public ResponseEntity<ProductDto> getProductById(@PathVariable Long id) {
 
-        Optional<Product> productOptional = Optional.ofNullable(productService.getProductById(id));
+        Product product = productService.getProductById(id);
 
-        if (productOptional.isPresent()) {
-            Product product = productOptional.get();
-            ProductDto productDto = converter.convertToDto(product);
-            return ResponseEntity.ok(productDto);
-        } else {
-            return ResponseEntity.notFound().build();
-        }
+        return ResponseEntity.status(HttpStatus.OK).body(converter.convertToDto(product));
+
     }
 
     @PostMapping 
